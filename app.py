@@ -86,3 +86,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Por favor sube un archivo CSV para comenzar.")
+
