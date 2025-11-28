@@ -47,7 +47,7 @@ if uploaded_file is not None:
         st.error(f"❌ Error al leer el CSV: {e}")
         st.stop()
 
-    # Columnas necesarias
+    # Columnas necesarias (ahora incluye User Email)
     columnas = [
         "Day of tm_start_local_at",
         "Segmento Tiempo en Losa",
@@ -56,6 +56,7 @@ if uploaded_file is not None:
         "Service Channel",
         "Minutes Creation - Pickup",
         "User Fullname",
+        "User Email",
         "User Phone Number"
     ]
 
@@ -113,7 +114,28 @@ if uploaded_file is not None:
         st.warning("⚠️ No hay compensaciones > 0.")
         st.stop()
 
+    # ------------------------------
+    # Mostrar datos filtrados
+    # ------------------------------
+    st.subheader("📊 Registros procesados")
     st.dataframe(df, use_container_width=True)
+
+    # ------------------------------
+    # RESUMEN POR TRAMO DE COMPENSACIÓN
+    # ------------------------------
+    st.subheader("📈 Resumen de compensaciones")
+
+    resumen = df["Monto a Reembolsar"].value_counts().sort_index()
+    total_casos = len(df)
+    total_dinero = df["Monto a Reembolsar"].sum()
+
+    st.write("### 🧮 Cantidad de casos por monto:")
+    for monto, cantidad in resumen.items():
+        st.write(f"- **${monto:,}** → {cantidad} casos")
+
+    st.write("### 💰 Total compensaciones:")
+    st.write(f"- **Total de casos:** {total_casos}")
+    st.write(f"- **Total en dinero:** ${total_dinero:,}")
 
     # ------------------------------
     # CREAR EXCEL ESTILIZADO CABIFY
@@ -129,23 +151,20 @@ if uploaded_file is not None:
     border_side = Side(style="thin", color="362065")
     border = Border(left=border_side, right=border_side, top=border_side, bottom=border_side)
 
-    # Colores para valores
     color_no_pagado = PatternFill("solid", fgColor="EA8C2E")
     color_pagado = PatternFill("solid", fgColor="0C936B")
 
-    # Colores compensación
     fill_3000 = PatternFill("solid", fgColor="EFBD03")
     fill_6000 = PatternFill("solid", fgColor="EA8C2E")
     fill_9000 = PatternFill("solid", fgColor="E83C96")
 
-    # Filas alternadas
     alt_fill = PatternFill("solid", fgColor="FAF8FE")
 
-    # Escribir headers
+    # Escribir headers + datos
     for r in dataframe_to_rows(df, index=False, header=True):
         ws.append(r)
 
-    # Aplicar formato al encabezado
+    # Encabezado
     for cell in ws[1]:
         cell.fill = header_fill
         cell.font = header_font
@@ -155,23 +174,23 @@ if uploaded_file is not None:
     # Activar filtros
     ws.auto_filter.ref = f"A1:{chr(64 + len(df.columns))}1"
 
-    # Aplicar estilos a filas
+    # Estilos por fila
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-        row_index = row[0].row
+        idx = row[0].row
 
-        # Alternancia de color
-        if row_index % 2 == 0:
+        # Filas alternadas
+        if idx % 2 == 0:
             for cell in row:
                 cell.fill = alt_fill
 
-        # Color por estado de pago
+        # Color Estado Pago
         estado = row[df.columns.get_loc("Estado Pago")].value
         if estado == "No Pagado":
             row[df.columns.get_loc("Estado Pago")].fill = color_no_pagado
         else:
             row[df.columns.get_loc("Estado Pago")].fill = color_pagado
 
-        # Color por compensación
+        # Color compensación
         monto = float(row[df.columns.get_loc("Monto a Reembolsar")].value)
         if monto == 3000:
             row[df.columns.get_loc("Monto a Reembolsar")].fill = fill_3000
@@ -185,21 +204,20 @@ if uploaded_file is not None:
             cell.border = border
             cell.alignment = Alignment(vertical="center")
 
-    # Crear COMBOBOX en Estado Pago
+    # ------------------------------
+    # COMBOBOX Estado Pago
+    # ------------------------------
     dv = DataValidation(type="list", formula1='"Pagado,No Pagado"', allow_blank=False)
-
     col_estado_pago = df.columns.get_loc("Estado Pago") + 1
     col_letter = chr(64 + col_estado_pago)
-    cell_range = f"{col_letter}2:{col_letter}1048576"
-
-    dv.add(cell_range)
+    dv.add(f"{col_letter}2:{col_letter}1048576")
     ws.add_data_validation(dv)
 
-    # Guardar archivo
+    # Guardar Excel
     wb.save(output)
     output.seek(0)
 
-    # Descarga
+    # Descargar
     st.download_button(
         "⬇️ Descargar Excel con Estilo Cabify",
         output,
