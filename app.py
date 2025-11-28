@@ -1,9 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from io import BytesIO
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.worksheet.datavalidation import DataValidation
 
 st.set_page_config(page_title="Compensaciones por Tiempo en Losa", layout="wide")
-
 st.title("📦 Compensaciones por Tiempo en Losa")
 
 # ------------------------------
@@ -60,10 +63,10 @@ if uploaded_file is not None:
         st.error(f"❌ Faltan columnas requeridas: {faltantes}")
         st.stop()
 
-    # Seleccionar solo columnas requeridas
+    # Seleccionar columnas
     df = df[columnas].copy()
 
-    # Convertir fecha
+    # Convertir fechas
     df["Day of tm_start_local_at"] = pd.to_datetime(
         df["Day of tm_start_local_at"],
         errors="coerce"
@@ -100,16 +103,9 @@ if uploaded_file is not None:
         st.stop()
 
     # ------------------------------
-    # Estado de Pago (combobox)
+    # Estado pago por defecto = Pagado
     # ------------------------------
-    st.subheader("💳 Estado de Pago para TODOS los registros")
-
-    estado_pago = st.selectbox(
-        "Selecciona estado de pago aplicado a todos los registros:",
-        ["Pagado", "No Pagado"]
-    )
-
-    df["Estado Pago"] = estado_pago
+    df["Estado Pago"] = "Pagado"
 
     # ------------------------------
     # Cálculo compensación
@@ -120,27 +116,54 @@ if uploaded_file is not None:
 
     df["Monto a Reembolsar"] = df["Minutes Creation - Pickup"].apply(calcular_compensacion)
 
-    # Eliminar registros con compensación 0
+    # Eliminar registros con compensación = 0
     df = df[df["Monto a Reembolsar"] > 0]
 
     if df.empty:
         st.warning("⚠️ No quedan registros con compensación > 0.")
         st.stop()
 
-    # Mostrar resultado
+    # Mostrar en pantalla
     st.subheader("📊 Registros procesados")
     st.dataframe(df, use_container_width=True)
 
     # ------------------------------
-    # Descargar CSV
+    # Crear Excel con COMBOBOX
     # ------------------------------
-    csv = df.to_csv(index=False).encode("utf-8")
+    output = BytesIO()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Compensaciones"
 
+    # Escribir DataFrame en Excel
+    for r in dataframe_to_rows(df, index=False, header=True):
+        ws.append(r)
+
+    # Crear validación de datos (lista desplegable)
+    dv = DataValidation(
+        type="list",
+        formula1='"Pagado,No Pagado"',
+        allow_blank=False
+    )
+
+    # Agregar validación a toda la columna "Estado Pago"
+    col_estado_pago = df.columns.get_loc("Estado Pago") + 1  
+    # +1 porque Excel indexa desde 1, no desde 0
+
+    dv.ranges.append(f"{chr(64 + col_estado_pago)}2:{chr(64 + col_estado_pago)}1048576")
+    ws.add_data_validation(dv)
+
+    wb.save(output)
+    output.seek(0)
+
+    # ------------------------------
+    # Botón para descargar Excel
+    # ------------------------------
     st.download_button(
-        "⬇️ Descargar CSV procesado",
-        data=csv,
-        file_name="compensaciones_filtrado.csv",
-        mime="text/csv"
+        "⬇️ Descargar Excel con selector de Pagado / No Pagado",
+        data=output,
+        file_name="compensaciones_losa.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
 
 else:
