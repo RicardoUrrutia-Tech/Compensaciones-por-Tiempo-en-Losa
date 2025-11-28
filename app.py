@@ -2,42 +2,47 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-st.set_page_config(page_title="Compensaciones Losa", layout="wide")
+st.set_page_config(page_title="Compensaciones por Tiempo en Losa", layout="wide")
 
-st.title("📦 Aplicación de Compensaciones - Tiempo en Losa")
+st.title("📦 Compensaciones por Tiempo en Losa")
 
-# -------- Función para calcular compensación --------
+# ------------------------------
+# Función para calcular compensación
+# ------------------------------
 def calcular_compensacion(minutos):
+    if pd.isna(minutos):
+        return 9000
     try:
-        if pd.isna(minutos):
-            return 9000
         minutos = float(minutos)
-        if minutos >= 50:
-            return 9000
-        elif minutos >= 40:
-            return 6000
-        elif minutos >= 35:
-            return 3000
-        else:
-            return 0
     except:
         return 9000
 
+    if minutos >= 50:
+        return 9000
+    elif minutos >= 40:
+        return 6000
+    elif minutos >= 35:
+        return 3000
+    else:
+        return 0
 
-# -------- Subir archivo --------
-uploaded_file = st.file_uploader("📤 Sube el archivo CSV", type=["csv"])
+
+# ------------------------------
+# Subir archivo CSV
+# ------------------------------
+uploaded_file = st.file_uploader("📤 Sube tu archivo CSV", type=["csv"])
 
 if uploaded_file is not None:
 
-    # ---- Leer CSV con máxima compatibilidad ----
+    # Leer CSV en modo seguro
     try:
-        df = pd.read_csv(uploaded_file, dtype=str)  # todo como texto para evitar errores
+        df = pd.read_csv(uploaded_file, dtype=str)
         st.success("Archivo cargado correctamente 🎉")
     except Exception as e:
         st.error(f"❌ Error al leer el archivo: {e}")
         st.stop()
 
-    # ---- Columnas requeridas ----
+    # Columnas necesarias
     columnas = [
         "Day of tm_start_local_at",
         "Segmento Tiempo en Losa",
@@ -46,74 +51,93 @@ if uploaded_file is not None:
         "Service Channel",
         "Minutes Creation - Pickup",
         "User Fullname",
-        "User Phone Number",
+        "User Phone Number"
     ]
 
-    # Validación
+    # Validar columnas
     faltantes = [c for c in columnas if c not in df.columns]
     if faltantes:
-        st.error(f"❌ Faltan columnas requeridas:\n{faltantes}")
+        st.error(f"❌ Faltan columnas requeridas: {faltantes}")
         st.stop()
 
-    # ---- Trabajar solo con las columnas necesarias ----
+    # Seleccionar solo columnas requeridas
     df = df[columnas].copy()
 
-    # ---- Convertir fechas ----
-    try:
-        df["Day of tm_start_local_at"] = pd.to_datetime(
-            df["Day of tm_start_local_at"],
-            errors="coerce"
-        ).dt.date
-    except:
-        st.error("❌ No se pudo convertir la columna de fechas.")
-        st.stop()
+    # Convertir fecha
+    df["Day of tm_start_local_at"] = pd.to_datetime(
+        df["Day of tm_start_local_at"],
+        errors="coerce"
+    ).dt.date
 
     if df["Day of tm_start_local_at"].isna().all():
-        st.error("❌ Ninguna fecha es válida. Revisa el formato.")
+        st.error("❌ Las fechas no se pudieron convertir. Verifica el formato.")
         st.stop()
 
-    # ---- Seleccionar rango de fechas ----
-    st.subheader("📅 Filtrar por fecha")
+    # ------------------------------
+    # Filtro de fechas
+    # ------------------------------
+    st.subheader("📅 Filtro de fechas")
 
     fecha_min = df["Day of tm_start_local_at"].min()
     fecha_max = df["Day of tm_start_local_at"].max()
 
-    fechas = st.date_input(
-        "Selecciona un rango de fechas:",
-        value=(fecha_min, fecha_max),
+    fecha_desde, fecha_hasta = st.date_input(
+        "Selecciona rango de fechas:",
+        value=(fecha_min, fecha_max)
     )
 
-    if isinstance(fechas, tuple) and len(fechas) == 2:
-        df = df[(df["Day of tm_start_local_at"] >= fechas[0]) &
-                (df["Day of tm_start_local_at"] <= fechas[1])]
-    else:
-        st.error("❌ Debes seleccionar un rango de fechas válido.")
+    if fecha_desde > fecha_hasta:
+        st.error("❌ La fecha inicial no puede ser mayor que la final.")
         st.stop()
+
+    df = df[
+        (df["Day of tm_start_local_at"] >= fecha_desde) &
+        (df["Day of tm_start_local_at"] <= fecha_hasta)
+    ]
 
     if df.empty:
-        st.warning("⚠️ No hay datos en el rango seleccionado.")
+        st.warning("⚠️ No hay registros en ese rango de fechas.")
         st.stop()
 
-    # ---- Estado de pago ----
-    st.subheader("💳 Estado de Pago")
+    # ------------------------------
+    # Estado de Pago (combobox)
+    # ------------------------------
+    st.subheader("💳 Estado de Pago para TODOS los registros")
 
-    pago = st.selectbox("Selecciona estado general:", ["Pagado", "No Pagado"])
-    df["Estado Pago"] = pago
+    estado_pago = st.selectbox(
+        "Selecciona estado de pago aplicado a todos los registros:",
+        ["Pagado", "No Pagado"]
+    )
 
-    # ---- Calcular compensación ----
+    df["Estado Pago"] = estado_pago
+
+    # ------------------------------
+    # Cálculo compensación
+    # ------------------------------
     df["Minutes Creation - Pickup"] = pd.to_numeric(
         df["Minutes Creation - Pickup"], errors="coerce"
     )
+
     df["Monto a Reembolsar"] = df["Minutes Creation - Pickup"].apply(calcular_compensacion)
 
-    # ---- Mostrar tabla ----
-    st.subheader("📊 Resultado")
+    # Eliminar registros con compensación 0
+    df = df[df["Monto a Reembolsar"] > 0]
+
+    if df.empty:
+        st.warning("⚠️ No quedan registros con compensación > 0.")
+        st.stop()
+
+    # Mostrar resultado
+    st.subheader("📊 Registros procesados")
     st.dataframe(df, use_container_width=True)
 
-    # ---- Descargar CSV ----
+    # ------------------------------
+    # Descargar CSV
+    # ------------------------------
     csv = df.to_csv(index=False).encode("utf-8")
+
     st.download_button(
-        label="⬇️ Descargar CSV procesado",
+        "⬇️ Descargar CSV procesado",
         data=csv,
         file_name="compensaciones_filtrado.csv",
         mime="text/csv"
