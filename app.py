@@ -103,9 +103,9 @@ if uploaded_file is not None:
         st.stop()
 
     # ------------------------------
-    # Estado de pago por defecto
+    # Estado de pago por DEFECTO = NO PAGADO
     # ------------------------------
-    df["Estado Pago"] = "Pagado"  # por defecto
+    df["Estado Pago"] = "No Pagado"
 
     # ------------------------------
     # Cálculo de compensación
