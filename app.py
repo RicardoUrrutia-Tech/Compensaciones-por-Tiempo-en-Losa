@@ -6,38 +6,39 @@ st.set_page_config(page_title="Compensaciones Losa", layout="wide")
 
 st.title("📦 Aplicación de Compensaciones - Tiempo en Losa")
 
-# ===============================
-# Función para calcular compensación
-# ===============================
+# -------- Función para calcular compensación --------
 def calcular_compensacion(minutos):
-    if pd.isna(minutos):
+    try:
+        if pd.isna(minutos):
+            return 9000
+        minutos = float(minutos)
+        if minutos >= 50:
+            return 9000
+        elif minutos >= 40:
+            return 6000
+        elif minutos >= 35:
+            return 3000
+        else:
+            return 0
+    except:
         return 9000
-    if minutos >= 50:
-        return 9000
-    if minutos >= 40:
-        return 6000
-    if minutos >= 35:
-        return 3000
-    return 0
 
 
-# ===============================
-# Cargar archivo
-# ===============================
+# -------- Subir archivo --------
 uploaded_file = st.file_uploader("📤 Sube el archivo CSV", type=["csv"])
 
 if uploaded_file is not None:
+
+    # ---- Leer CSV con máxima compatibilidad ----
     try:
-        df = pd.read_csv(uploaded_file)
+        df = pd.read_csv(uploaded_file, dtype=str)  # todo como texto para evitar errores
         st.success("Archivo cargado correctamente 🎉")
     except Exception as e:
         st.error(f"❌ Error al leer el archivo: {e}")
         st.stop()
 
-    # ===============================
-    # Columnas requeridas
-    # ===============================
-    columnas_requeridas = [
+    # ---- Columnas requeridas ----
+    columnas = [
         "Day of tm_start_local_at",
         "Segmento Tiempo en Losa",
         "End State",
@@ -45,98 +46,81 @@ if uploaded_file is not None:
         "Service Channel",
         "Minutes Creation - Pickup",
         "User Fullname",
-        "User Phone Number"
+        "User Phone Number",
     ]
 
-    # Validación de columnas
-    faltantes = [c for c in columnas_requeridas if c not in df.columns]
-
+    # Validación
+    faltantes = [c for c in columnas if c not in df.columns]
     if faltantes:
-        st.error(f"❌ El CSV no contiene las columnas requeridas:\n{faltantes}")
+        st.error(f"❌ Faltan columnas requeridas:\n{faltantes}")
         st.stop()
 
-    df = df[columnas_requeridas]
+    # ---- Trabajar solo con las columnas necesarias ----
+    df = df[columnas].copy()
 
-    # ===============================
-    # Convertir columna de fecha
-    # ===============================
-    df["Day of tm_start_local_at"] = pd.to_datetime(
-        df["Day of tm_start_local_at"],
-        errors="coerce",
-        infer_datetime_format=True
-    ).dt.date
+    # ---- Convertir fechas ----
+    try:
+        df["Day of tm_start_local_at"] = pd.to_datetime(
+            df["Day of tm_start_local_at"],
+            errors="coerce"
+        ).dt.date
+    except:
+        st.error("❌ No se pudo convertir la columna de fechas.")
+        st.stop()
 
     if df["Day of tm_start_local_at"].isna().all():
-        st.error("❌ No se pudieron convertir las fechas. Revisa el formato del CSV.")
+        st.error("❌ Ninguna fecha es válida. Revisa el formato.")
         st.stop()
 
-    # ===============================
-    # Filtro por rango de fechas
-    # ===============================
-    st.subheader("📅 Filtro por fecha")
+    # ---- Seleccionar rango de fechas ----
+    st.subheader("📅 Filtrar por fecha")
 
     fecha_min = df["Day of tm_start_local_at"].min()
     fecha_max = df["Day of tm_start_local_at"].max()
 
-    fecha_desde, fecha_hasta = st.date_input(
-        "Selecciona el rango de fechas:",
+    fechas = st.date_input(
+        "Selecciona un rango de fechas:",
         value=(fecha_min, fecha_max),
-        min_value=fecha_min,
-        max_value=fecha_max
     )
 
-    if fecha_desde > fecha_hasta:
-        st.error("❌ La fecha inicial no puede ser mayor que la fecha final.")
+    if isinstance(fechas, tuple) and len(fechas) == 2:
+        df = df[(df["Day of tm_start_local_at"] >= fechas[0]) &
+                (df["Day of tm_start_local_at"] <= fechas[1])]
+    else:
+        st.error("❌ Debes seleccionar un rango de fechas válido.")
         st.stop()
-
-    df = df[(df["Day of tm_start_local_at"] >= fecha_desde) &
-            (df["Day of tm_start_local_at"] <= fecha_hasta)]
 
     if df.empty:
-        st.warning("⚠️ No hay registros en ese rango de fechas.")
+        st.warning("⚠️ No hay datos en el rango seleccionado.")
         st.stop()
 
-    # ===============================
-    # Estado de pago
-    # ===============================
+    # ---- Estado de pago ----
     st.subheader("💳 Estado de Pago")
 
-    opcion_pago = st.selectbox(
-        "Selecciona estado general:",
-        ["Pagado", "No Pagado"]
+    pago = st.selectbox("Selecciona estado general:", ["Pagado", "No Pagado"])
+    df["Estado Pago"] = pago
+
+    # ---- Calcular compensación ----
+    df["Minutes Creation - Pickup"] = pd.to_numeric(
+        df["Minutes Creation - Pickup"], errors="coerce"
     )
-
-    df["Estado Pago"] = opcion_pago
-
-    # ===============================
-    # Calcular compensaciones
-    # ===============================
     df["Monto a Reembolsar"] = df["Minutes Creation - Pickup"].apply(calcular_compensacion)
 
-    # ===============================
-    # Mostrar tabla
-    # ===============================
-    st.subheader("📊 Resultado filtrado")
+    # ---- Mostrar tabla ----
+    st.subheader("📊 Resultado")
     st.dataframe(df, use_container_width=True)
 
-    # ===============================
-    # Descargar CSV
-    # ===============================
-    @st.cache_data
-    def convert_to_csv(df):
-        return df.to_csv(index=False).encode("utf-8")
-
-    csv_final = convert_to_csv(df)
-
+    # ---- Descargar CSV ----
+    csv = df.to_csv(index=False).encode("utf-8")
     st.download_button(
         label="⬇️ Descargar CSV procesado",
-        data=csv_final,
+        data=csv,
         file_name="compensaciones_filtrado.csv",
         mime="text/csv"
     )
 
 else:
-    st.info("Por favor sube un archivo CSV para comenzar.")
+    st.info("Sube un archivo CSV para comenzar.")
 
 
 
