@@ -1,19 +1,13 @@
 # 📦 Aplicación de Compensaciones por Tiempo en Losa
 
-Esta aplicación permite cargar un archivo CSV con información de reservas y generar un reporte filtrado con:
-
-- Selección automática de columnas relevantes  
-- Filtro por fecha (rango de fechas)  
-- Selección de estado de pago (Pagado / No Pagado)  
-- Cálculo automático del monto a reembolsar según reglas de negocio  
-- Descarga del archivo final procesado  
+Esta aplicación en Streamlit permite cargar un archivo CSV y generar un reporte de compensaciones según el tiempo transcurrido entre la creación y el retiro de una reserva.
 
 ---
 
 ## 🚀 Funcionalidades
 
-### ✔️ Columnas seleccionadas automáticamente
-La aplicación toma solo los siguientes atributos:
+### ✔️ Selección automática de columnas relevantes
+El sistema toma solo los siguientes campos del CSV:
 
 - Day of tm_start_local_at  
 - Segmento Tiempo en Losa  
@@ -24,26 +18,26 @@ La aplicación toma solo los siguientes atributos:
 - User Fullname  
 - User Phone Number  
 
-### ✔️ Filtro por fecha  
-Basado en **Day of tm_start_local_at**.
+### ✔️ Filtro por rango de fechas
+Basado en `Day of tm_start_local_at`.
 
-### ✔️ Estado de pago (combobox)  
-Agrega un campo adicional:  
-- Pagado  
-- No Pagado  
+### ✔️ Estado de pago (Pagado / No Pagado)
+Agrega un campo editable para todos los registros.
 
-### ✔️ Cálculo de compensación  
-Reglas:
+### ✔️ Cálculo automático del monto a reembolsar
 
-| Minutes Creation - Pickup | Monto |
-|--------------------------|--------|
-| >= 35 y < 40             | $3.000 |
-| >= 40 y < 50             | $6.000 |
-| ≥ 50                     | $9.000 |
-| Null                     | $9.000 |
+| Condición | Monto |
+|----------|--------|
+| ≥ 35 y < 40 min | $3.000 |
+| ≥ 40 y < 50 min | $6.000 |
+| ≥ 50 min | $9.000 |
+| Null | $9.000 |
+| < 35 min | excluido del reporte |
 
-### ✔️ Exportación  
-Descarga en formato CSV procesado.
+**Solo se incluyen registros con compensación > 0.**
+
+### ✔️ Descarga de archivo procesado
+Se genera un CSV listo para reportes.
 
 ---
 
