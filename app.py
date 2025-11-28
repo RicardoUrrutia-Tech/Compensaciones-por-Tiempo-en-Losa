@@ -63,17 +63,17 @@ if uploaded_file is not None:
         st.error(f"❌ Faltan columnas requeridas: {faltantes}")
         st.stop()
 
-    # Seleccionar columnas
+    # Seleccionar columnas relevantes
     df = df[columnas].copy()
 
-    # Convertir fechas
+    # Convertir fecha
     df["Day of tm_start_local_at"] = pd.to_datetime(
         df["Day of tm_start_local_at"],
         errors="coerce"
     ).dt.date
 
     if df["Day of tm_start_local_at"].isna().all():
-        st.error("❌ Las fechas no se pudieron convertir. Verifica el formato.")
+        st.error("❌ Ninguna fecha válida en el archivo. Revisa el formato.")
         st.stop()
 
     # ------------------------------
@@ -103,12 +103,12 @@ if uploaded_file is not None:
         st.stop()
 
     # ------------------------------
-    # Estado pago por defecto = Pagado
+    # Estado de pago por defecto
     # ------------------------------
-    df["Estado Pago"] = "Pagado"
+    df["Estado Pago"] = "Pagado"  # por defecto
 
     # ------------------------------
-    # Cálculo compensación
+    # Cálculo de compensación
     # ------------------------------
     df["Minutes Creation - Pickup"] = pd.to_numeric(
         df["Minutes Creation - Pickup"], errors="coerce"
@@ -116,14 +116,14 @@ if uploaded_file is not None:
 
     df["Monto a Reembolsar"] = df["Minutes Creation - Pickup"].apply(calcular_compensacion)
 
-    # Eliminar registros con compensación = 0
+    # Filtrar registros con compensación > 0
     df = df[df["Monto a Reembolsar"] > 0]
 
     if df.empty:
-        st.warning("⚠️ No quedan registros con compensación > 0.")
+        st.warning("⚠️ Todos los registros tienen compensación 0. Nada para exportar.")
         st.stop()
 
-    # Mostrar en pantalla
+    # Mostrar tabla procesada
     st.subheader("📊 Registros procesados")
     st.dataframe(df, use_container_width=True)
 
@@ -135,32 +135,35 @@ if uploaded_file is not None:
     ws = wb.active
     ws.title = "Compensaciones"
 
-    # Escribir DataFrame en Excel
+    # Escribir datos
     for r in dataframe_to_rows(df, index=False, header=True):
         ws.append(r)
 
-    # Crear validación de datos (lista desplegable)
+    # Validación de datos para Estado Pago
     dv = DataValidation(
         type="list",
         formula1='"Pagado,No Pagado"',
         allow_blank=False
     )
 
-    # Agregar validación a toda la columna "Estado Pago"
-    col_estado_pago = df.columns.get_loc("Estado Pago") + 1  
-    # +1 porque Excel indexa desde 1, no desde 0
+    # Ubicar la columna "Estado Pago"
+    col_estado_pago = df.columns.get_loc("Estado Pago") + 1
+    col_letter = chr(64 + col_estado_pago)
 
-    dv.ranges.append(f"{chr(64 + col_estado_pago)}2:{chr(64 + col_estado_pago)}1048576")
+    # Rango de la columna completa (desde fila 2 hacia abajo)
+    cell_range = f"{col_letter}2:{col_letter}1048576"
+
+    dv.add(cell_range)
     ws.add_data_validation(dv)
 
     wb.save(output)
     output.seek(0)
 
     # ------------------------------
-    # Botón para descargar Excel
+    # Descargar archivo Excel
     # ------------------------------
     st.download_button(
-        "⬇️ Descargar Excel con selector de Pagado / No Pagado",
+        "⬇️ Descargar Excel con selector Pagado / No Pagado",
         data=output,
         file_name="compensaciones_losa.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -168,6 +171,5 @@ if uploaded_file is not None:
 
 else:
     st.info("Sube un archivo CSV para comenzar.")
-
 
 
